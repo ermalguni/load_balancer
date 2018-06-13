@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"math/rand"
-	"time"
 	"runtime"
 	"time"
 )
@@ -18,12 +17,19 @@ type Request struct {
 
 func requester(work chan Request) {
 	c := make(chan interface{}, 100)
+
+	go func() {
+		for i := 0; i < 1000; i++ {
+			work <- Request{nello_decode, c, NelloRequest{Topic: "/nello_one/TxrmdW/map/"}}
+		}
+	}()
+	/*
 	go func() {
 		for {
-			time.Sleep(time.Microsecond * time.Duration(rand.Int63n(10))) // simulate uneven throughput
-			work <- Request{do_some_work, c} // send a work request
-			result := <-c // wait for answer
-			do_something_else(result)
+				time.Sleep(time.Microsecond * time.Duration(rand.Int63n(10)))                   // simulate uneven throughput
+				work <- Request{nello_decode, c, NelloRequest{Topic: "/nello_one/TxrmdW/map/"}} // send a work request
+				// result := <-c                                                                   // wait for answer
+				// fmt.Println("Result: ", (result.(NelloRequest)).NelloOneID)
 		}
 	}()
 }
@@ -46,22 +52,54 @@ func main() {
 
 	rand.Seed(8)
 
-	work := make(chan Request, 100)
+	work1 := make(chan Request, 5000)
+	work2 := make(chan Request, 5000)
+	work3 := make(chan Request, 5000)
 
-	balancer := new_balancer(nworkers, work)
-	balancer.start()
-	balancer.balance(work)
+	// balancer := new_balancer(nworkers, work1)
+	balancer1 := MakeBalancer(&BalancerOpts{
+		Name:         "LB1",
+		NumWorkers:   10,
+		IsPipeline:   true,
+		WorkChannel:  work1,
+		NextPipeline: work2,
+		Fn:           nello_test_2,
+	})
+	// balancer1.start()
+	balancer1.balance()
+
+	balancer2 := MakeBalancer(&BalancerOpts{
+		Name:         "LB2",
+		NumWorkers:   2,
+		IsPipeline:   true,
+		WorkChannel:  work2,
+		NextPipeline: work3,
+		Fn:           nello_test_3,
+	})
+	// balancer2.start()
+	balancer2.balance()
+
+	balancer3 := MakeBalancer(&BalancerOpts{
+		Name:        "LB3",
+		NumWorkers:  2,
+		IsPipeline:  false,
+		WorkChannel: work3,
+	})
+	// balancer3.start()
+	balancer3.balance()
 
 	for i := 1; i <= 100; i++ {
-		requester(work)
+		requester(work1)
 	}
 
 	go func() {
-		for _ = range time.Tick(250 * time.Millisecond) {  
-			balancer.print()  // periodically print out the number of pending tasks assigned to each worker.
+		for _ = range time.Tick(50 * time.Millisecond) {
+			balancer1.print()
+			balancer2.print()
+			balancer3.print() // periodically print out the number of pending tasks assigned to each worker.
 		}
 	}()
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(5 * time.Second)
 	fmt.Printf("\n %d jobs complete.\n", counter)
 }
