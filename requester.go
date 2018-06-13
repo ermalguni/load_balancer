@@ -5,17 +5,19 @@ import (
 	"math/rand"
 	"time"
 	"runtime"
+	"time"
 )
 
 var counter int
 
 type Request struct {
-	fn func() int // operation to perform
-	c  chan int   // channel on which to return result
+	fn   func(data *interface{}) interface{} // operation to perform
+	c    chan interface{}
+	data interface{} // channel on which to return result
 }
 
 func requester(work chan Request) {
-	c := make(chan int, 100)
+	c := make(chan interface{}, 100)
 	go func() {
 		for {
 			time.Sleep(time.Microsecond * time.Duration(rand.Int63n(10))) // simulate uneven throughput
